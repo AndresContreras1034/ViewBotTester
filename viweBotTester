@@ -1,0 +1,87 @@
+import os
+import time
+import subprocess
+import threading
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+
+# === CONFIGURACIÓN GENERAL ===
+
+NUM_VENTANAS = 100                          # Total de bots que deseas abrir
+BLOQUE_VENTANAS = 10                        # Cuántos bots abrir a la vez
+URL = "Stream donde se tiene pensado hacer."
+CHROMEDRIVER_PATH = "chromedriver.exe"
+TIEMPO_VISUALIZACION = 120                  # En segundos (2 minutos)
+
+# === OPCIONES DE NAVEGADOR HEADLESS Y SILENCIOSO ===
+
+opciones = Options()
+opciones.add_argument("--headless")                        # Evita mostrar las ventanas
+opciones.add_argument("--remote-debugging-pipe")           # Evita logs tipo DevTools
+opciones.add_argument("--mute-audio")
+opciones.add_argument("--incognito")
+opciones.add_argument("--no-sandbox")
+opciones.add_argument("--disable-extensions")
+opciones.add_argument("--disable-popup-blocking")
+opciones.add_argument("--window-size=1920,1080")
+opciones.add_argument("--log-level=3")                     # Baja el nivel de logs
+opciones.add_argument("--disable-software-rasterizer")
+opciones.add_argument("--disable-speech-api")
+opciones.add_argument("--disable-features=Translate,AutofillServerCommunication,OptimizationHintsFetching,AutofillCreditCardAssist")
+
+# Silencia TensorFlow y Chrome internamente
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+# === LISTA GLOBAL DE DRIVERS ===
+drivers = []
+
+# === FUNCIÓN PARA INICIAR UN BOT INDIVIDUAL ===
+def abrir_bot(i):
+    try:
+        print(f"Abriendo bot {i+1}...")
+        servicio = Service(
+            CHROMEDRIVER_PATH,
+            log_path=os.devnull                    # Oculta logs de ChromeDriver
+        )
+        servicio.creationflags = subprocess.CREATE_NO_WINDOW  # Oculta ventana CMD (Windows)
+
+        driver = webdriver.Chrome(service=servicio, options=opciones)
+        driver.get(URL)
+        drivers.append(driver)
+
+    except Exception as e:
+        print(f"Error en bot {i+1}: {e}")
+
+# === ABRIR BOTS POR BLOQUES PARA EVITAR BLOQUEO DEL SISTEMA ===
+
+for bloque_inicio in range(0, NUM_VENTANAS, BLOQUE_VENTANAS):
+    hilos = []
+    bloque_final = min(bloque_inicio + BLOQUE_VENTANAS, NUM_VENTANAS)
+    
+    for i in range(bloque_inicio, bloque_final):
+        hilo = threading.Thread(target=abrir_bot, args=(i,))
+        hilos.append(hilo)
+        hilo.start()
+
+    for hilo in hilos:
+        hilo.join()
+
+    time.sleep(3)  # Espera entre bloques para evitar saturación
+
+# === MANTENER BOTS CONECTADOS ===
+
+print(f"\nManteniendo viewers conectados durante {TIEMPO_VISUALIZACION} segundos...\n")
+time.sleep(TIEMPO_VISUALIZACION)
+
+# === CERRAR TODAS LAS VENTANAS ===
+
+print("Cerrando todas las ventanas...")
+for i, driver in enumerate(drivers):
+    try:
+        driver.quit()
+        print(f"Bot {i+1} cerrado.")
+    except:
+        print(f"No se pudo cerrar el bot {i+1}.")
+
+print("\n✅ Finalizado correctamente.")
